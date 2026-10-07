@@ -94,8 +94,33 @@ class PersonResponse(BaseModel):
     email: str | None = None
     phone: str | None = None
     active: bool
+    ldap_uid: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DirectorySyncRequest(BaseModel):
+    # Defaults to the signed-in LDAP administrator.
+    username: str | None = Field(None, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class DirectorySyncIssue(BaseModel):
+    person_id: int
+    name: str
+    reason: str
+
+
+class DirectorySyncResponse(BaseModel):
+    directory_people: int
+    created: list[str]
+    updated: list[str]
+    linked: list[str]
+    deactivated: list[str]
+    reactivated: list[str]
+    skipped: list[DirectorySyncIssue]
+    responsible_group: str | None = None
+    responsible_group_found: bool = False
 
 
 class LocationCreate(BaseModel):

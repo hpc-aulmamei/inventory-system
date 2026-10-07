@@ -1,10 +1,11 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import begin_inventory_write, get_db
+from app.services import directory_sync, ldap_auth
 from app.services.code_generator import reserve_entity_id
 
 router = APIRouter(prefix="/people", tags=["People"])
@@ -53,6 +54,34 @@ def get_people(
         query = query.filter(models.Person.active == 1)
 
     return query.order_by(models.Person.name.asc()).all()
+
+
+@router.post("/directory-sync", response_model=schemas.DirectorySyncResponse)
+def sync_from_directory(payload: schemas.DirectorySyncRequest, request: Request, db: Session = Depends(get_db)):
+    if not ldap_auth.ldap_enabled():
+        raise HTTPException(status_code=503, detail="LDAP_SERVER_URI is not configured in backend/.env")
+    admin = request.state.admin
+    username = (payload.username or "").strip() or (admin.username if admin.method == "ldap" else "")
+    if not username:
+        raise HTTPException(status_code=400, detail="Introdu utilizatorul FreeIPA cu care se citește directorul.")
+
+    # Read the directory before taking the write lock: it can take a while.
+    try:
+        snapshot = ldap_auth.read_directory_people(username, payload.password)
+    except ldap_auth.LdapInvalidCredentials:
+        # Not 401: the admin session is fine, and the frontend treats 401 as a logout.
+        raise HTTPException(status_code=403, detail="Utilizator sau parolă FreeIPA incorectă.") from None
+    except ldap_auth.LdapUnavailable:
+        raise HTTPException(status_code=503, detail="Serverul LDAP nu este disponibil. Încearcă din nou.") from None
+    if not snapshot.people:
+        # An empty answer more likely means missing read rights than an empty
+        # directory; never deactivate everyone because of it.
+        raise HTTPException(status_code=409, detail="Directorul nu a returnat niciun cont activ. Nu s-a modificat nimic.")
+
+    begin_inventory_write(db)
+    result = directory_sync.sync_people(db, snapshot, actor=f"{admin.display_name} ({username})")
+    db.commit()
+    return result
 
 
 @router.get("/{person_id}", response_model=schemas.PersonResponse)

@@ -46,6 +46,9 @@ class Person(Base):
     is_responsible = Column(Integer, default=0, nullable=False)
     is_borrower = Column(Integer, default=1, nullable=False)
     active = Column(Integer, default=1, nullable=False)
+    # Directory username (FreeIPA uid) for people imported from LDAP; NULL for
+    # people added by hand, whom the directory import never changes.
+    ldap_uid = Column(String, nullable=True, unique=True, index=True)
 
 
 class Location(Base):

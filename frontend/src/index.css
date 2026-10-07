@@ -1100,6 +1100,20 @@ html[data-theme="dark"] .pending-image button { background: rgba(2,10,11,.78); }
 .reset-modal-icon { width: 48px; height: 48px; margin-bottom: 15px; border-radius: 14px; background: var(--danger-soft); color: var(--danger); display: grid; place-items: center; }
 .reset-modal h3 { margin: 6px 0 8px; color: var(--text); font-size: 19px; letter-spacing: -.02em; }
 .reset-modal > p { margin: 0 0 18px; color: var(--text-soft); font-size: 10.5px; line-height: 1.65; }
+/* FreeIPA people sync */
+.people-intro-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.directory-sync-modal { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; }
+.directory-sync-icon { background: var(--primary-soft); color: var(--primary); }
+.directory-sync-rules { margin: 0 0 16px; padding-left: 18px; color: var(--text-soft); font-size: 11px; line-height: 1.6; }
+.directory-sync-modal .field { margin-bottom: 12px; }
+.directory-sync-result p { color: var(--text-soft); font-size: 11.5px; line-height: 1.6; }
+.directory-sync-result details { padding: 8px 0; border-bottom: 1px solid var(--border); color: var(--text); font-size: 12px; }
+.directory-sync-result details p { margin: 6px 0 0; }
+.directory-sync-result ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.5; }
+.directory-sync-result .alert { margin-top: 12px; }
+.object-cell .directory-badge { color: var(--primary); }
+.directory-badge { display: inline-block; padding: 1px 6px; border-radius: 6px; background: var(--primary-soft); color: var(--primary); font-size: 10px; font-weight: 700; }
+.directory-linked-note { margin: 0 0 12px; display: flex; gap: 7px; align-items: flex-start; color: var(--text-soft); font-size: 11px; line-height: 1.5; }
 .reset-check { display: flex; align-items: flex-start; gap: 9px; margin-top: 4px; color: var(--text-soft); font-size: 10px; line-height: 1.45; }
 .reset-check input { margin-top: 2px; accent-color: var(--danger); }
 .reset-actions { margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px; }

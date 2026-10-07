@@ -59,6 +59,12 @@ LDAP_REQUIRED_GROUP_DN=cn=inventory-admins,cn=groups,cn=accounts,dc=example,dc=c
 LDAP_CA_CERT_FILE=/etc/ipa/ca.crt
 ```
 
+**Importing people from FreeIPA.** On **Persoane**, *Sincronizează din FreeIPA* reads the directory with the administrator's own FreeIPA password (used for that run only, never stored):
+
+* every active account becomes a person who can borrow; members of `LDAP_RESPONSIBLE_GROUP_DN` are also responsible for items;
+* names, emails and roles of imported people follow the directory on every run; people added by hand are not changed (one with the same email as a directory account is linked to it instead of duplicated);
+* accounts deleted or disabled in FreeIPA are deactivated, except people with an active loan or items in their care, which are reported instead.
+
 The server certificate and host name are always verified. Plain `ldap://` is accepted only with `LDAP_START_TLS=true`. Group membership is checked when someone signs in, so removing a person from the group takes effect at their next sign-in (sessions last at most `ADMIN_SESSION_TTL_SECONDS`).
 
 ---

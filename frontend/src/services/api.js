@@ -208,6 +208,9 @@ export function deleteDeviceImage(deviceId, imageId) {
   return apiRequest(`/devices/${deviceId}/images/${imageId}`, { method: "DELETE" });
 }
 
+export function syncPeopleFromDirectory({ username = "", password }) {
+  return apiRequest("/people/directory-sync", { method: "POST", body: JSON.stringify(username ? { username, password } : { password }) });
+}
 export function getPeople(includeInactive = true, role = "") { return apiRequest(`/people/?include_inactive=${includeInactive}${role ? `&role=${encodeURIComponent(role)}` : ""}`); }
 export function createPerson(person) { return apiRequest("/people/", { method: "POST", body: JSON.stringify(person) }); }
 export function updatePerson(personId, person) { return apiRequest(`/people/${personId}`, { method: "PUT", body: JSON.stringify(person) }); }

@@ -204,7 +204,7 @@ export default function AdminApp({ theme, onToggleTheme }) {
     }
     if (currentPage === "Add Device") return <AddDevice key={addDeviceTag} initialTag={addDeviceTag} onDeviceAdded={loadDevices} onNavigate={navigate} onOpenDevice={openDevice} />;
     if (currentPage === "Tags") return <Tags />;
-    if (currentPage === "People") return <People />;
+    if (currentPage === "People") return <People admin={admin} />;
     if (currentPage === "Locations") return <Locations />;
     if (currentPage === "Loans") return <Loans onInventoryChanged={loadDevices} />;
     if (currentPage === "Journal") return <Journal />;

@@ -69,6 +69,9 @@ def ensure_schema_compatibility():
         with engine.begin() as connection:
             if "is_borrower" not in people_columns:
                 connection.execute(text("ALTER TABLE people ADD COLUMN is_borrower INTEGER NOT NULL DEFAULT 1"))
+            if "ldap_uid" not in people_columns:
+                connection.execute(text("ALTER TABLE people ADD COLUMN ldap_uid VARCHAR"))
+                connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_people_ldap_uid ON people (ldap_uid)"))
             if "is_responsible" not in people_columns:
                 connection.execute(text("ALTER TABLE people ADD COLUMN is_responsible INTEGER NOT NULL DEFAULT 0"))
                 # Legacy assignments are ambiguous: preserve them for admin review.

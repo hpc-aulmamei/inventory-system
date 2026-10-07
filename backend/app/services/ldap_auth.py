@@ -9,11 +9,13 @@ import logging
 import os
 import re
 import ssl
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ldap3 import BASE, NONE, SYNC, Connection, Server, Tls
+from ldap3 import BASE, LEVEL, NONE, SYNC, Connection, Server, Tls
 from ldap3.core.exceptions import LDAPException
 from ldap3.utils.conv import escape_filter_chars
 from ldap3.utils.dn import escape_rdn
@@ -168,8 +170,9 @@ def _search_one(connection: Connection, base: str, search_filter: str, attribute
     return None
 
 
-def authenticate(username: str, password: str) -> LdapUser:
-    config = load_config()
+@contextmanager
+def _bound_connection(config: LdapConfig, username: str, password: str) -> Iterator[tuple[Connection, str]]:
+    """Open a verified TLS connection and bind as the given directory user."""
     if not password or not USERNAME_PATTERN.fullmatch(username):
         raise LdapInvalidCredentials()
 
@@ -193,7 +196,21 @@ def authenticate(username: str, password: str) -> LdapUser:
             # unknown or locked account). Details stay in the server log.
             logger.info("LDAP bind refused for %s: %s", username, connection.result.get("description"))
             raise LdapInvalidCredentials()
+        yield connection, user_dn
+    except LDAPException as exc:
+        logger.warning("LDAP server %s is unavailable: %s", config.host, exc)
+        raise LdapUnavailable("LDAP server is unavailable") from exc
+    finally:
+        if connection is not None:
+            try:
+                connection.unbind()
+            except LDAPException:
+                pass
 
+
+def authenticate(username: str, password: str) -> LdapUser:
+    config = load_config()
+    with _bound_connection(config, username, password) as (connection, user_dn):
         entry = _search_one(connection, user_dn, "(objectClass=*)", ["cn", "displayName", "memberOf"]) or {}
         group = _normalize_dn(config.required_group_dn)
         member_of = {_normalize_dn(str(dn)) for dn in entry.get("memberOf") or []}
@@ -209,12 +226,75 @@ def authenticate(username: str, password: str) -> LdapUser:
             username=username,
             display_name=_first(entry, "displayName") or _first(entry, "cn") or username,
         )
-    except LDAPException as exc:
-        logger.warning("LDAP server %s is unavailable: %s", config.host, exc)
-        raise LdapUnavailable("LDAP server is unavailable") from exc
-    finally:
-        if connection is not None:
-            try:
-                connection.unbind()
-            except LDAPException:
-                pass
+
+
+@dataclass(frozen=True)
+class DirectoryPerson:
+    uid: str
+    name: str
+    email: str | None
+    phone: str | None
+    responsible: bool
+
+
+@dataclass(frozen=True)
+class DirectorySnapshot:
+    people: list[DirectoryPerson]
+    # None: no responsible group configured, so roles are left as they are.
+    responsible_group: str | None
+    responsible_group_found: bool
+
+
+# FreeIPA's built-in administrator is an account, not a person who borrows.
+NON_PERSON_ACCOUNTS = {"admin"}
+_PAGED_RESULTS = "1.2.840.113556.1.4.319"
+
+
+def _search_all(connection: Connection, base: str, search_filter: str, attributes: list[str]) -> list[dict]:
+    entries, cookie = [], None
+    while True:
+        connection.search(base, search_filter, search_scope=LEVEL, attributes=attributes,
+                          paged_size=500, paged_cookie=cookie)
+        entries += [item for item in connection.response or [] if item.get("type") == "searchResEntry"]
+        cookie = (connection.result.get("controls") or {}).get(_PAGED_RESULTS, {}).get("value", {}).get("cookie")
+        if not cookie:
+            return entries
+
+
+def read_directory_people(username: str, password: str) -> DirectorySnapshot:
+    """Read every active directory account as a person, using the caller's own login."""
+    config = load_config()
+    rdn, users_base = config.user_dn_template.split(",", 1)
+    uid_attribute = rdn.split("=", 1)[0].strip()
+    group_dn = os.getenv("LDAP_RESPONSIBLE_GROUP_DN", "").strip() or None
+
+    with _bound_connection(config, username, password) as (connection, _):
+        group_members: set[str] = set()
+        group_found = False
+        if group_dn:
+            group = _search_one(connection, group_dn, "(objectClass=*)", ["member", "uniqueMember"])
+            group_found = group is not None
+            for dn in (group or {}).get("member", []) + (group or {}).get("uniqueMember", []):
+                group_members.add(_normalize_dn(str(dn)))
+
+        attributes = [uid_attribute, "cn", "displayName", "givenName", "sn", "mail",
+                      "telephoneNumber", "mobile", "nsAccountLock", "memberOf"]
+        people = []
+        for item in _search_all(connection, users_base, "(objectClass=person)", attributes):
+            entry = item.get("attributes") or {}
+            uid = _first(entry, uid_attribute)
+            locked = str(_first(entry, "nsAccountLock") or "").upper() == "TRUE"
+            if not uid or locked or uid in NON_PERSON_ACCOUNTS:
+                continue
+            full_name = " ".join(part for part in (_first(entry, "givenName"), _first(entry, "sn")) if part)
+            member_of = {_normalize_dn(str(dn)) for dn in entry.get("memberOf") or []}
+            people.append(DirectoryPerson(
+                uid=uid,
+                name=(_first(entry, "displayName") or _first(entry, "cn") or full_name or uid)[:200],
+                email=((_first(entry, "mail") or "")[:254] or None),
+                phone=((_first(entry, "telephoneNumber") or _first(entry, "mobile") or "")[:80] or None),
+                responsible=bool(group_dn) and (
+                    _normalize_dn(group_dn) in member_of or _normalize_dn(str(item.get("dn", ""))) in group_members
+                ),
+            ))
+    return DirectorySnapshot(people=people, responsible_group=group_dn, responsible_group_found=group_found)

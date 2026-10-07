@@ -39,9 +39,22 @@ test("sheet HTML escapes tag data and paginates", () => {
   assert.ok(html.includes("outline: .2mm dashed"));
 });
 
-test("65/A4 sheets (38,1 × 21,2 mm) are the default and use the compact label", () => {
+test("TW-2065 sheets are the default, with the calibrated positions", () => {
   const preset = presetById("");
-  assert.equal(preset.id, "5x13-38.1x21.2");
+  assert.equal(preset.id, "tw-2065");
+  assert.equal(labelsPerSheet(preset), 65);
+  const layout = layoutTags(66, preset);
+  assert.deepEqual(layout[0], { page: 0, left: 4, top: 8.7 });
+  assert.deepEqual(layout[4], { page: 0, left: 166.4, top: 8.7 });
+  assert.deepEqual(layout[5], { page: 0, left: 4, top: 29.9 });
+  assert.deepEqual(layout[64], { page: 0, left: 166.4, top: 263.1 });
+  assert.equal(layout[65].page, 1);
+  const html = buildTagSheetHtml([{ code: "INV-000001", barcode_svg: "<svg/>" }], preset);
+  assert.ok(!html.includes('class="brand"') && html.includes("width: 39.1mm"));
+});
+
+test("Avery L7651 sheets (38,1 × 21,2 mm) use the compact label", () => {
+  const preset = presetById("5x13-38.1x21.2");
   assert.equal(labelsPerSheet(preset), 65);
   const layout = layoutTags(66, preset);
   assert.deepEqual(layout[0], { page: 0, left: 4.75, top: 10.7 });

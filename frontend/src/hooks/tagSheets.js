@@ -1,6 +1,10 @@
 // A4 adhesive label sheets for pre-printed asset tags. All sizes are in mm;
 // the browser must print at 100% scale with no margins for them to line up.
 export const SHEET_PRESETS = [
+  // TW-2065 (65/A4, nominal 38.1 × 21.2 mm), calibrated by test prints on the
+  // lab printer on 7 Oct 2026: printing 1 mm wider than nominal, 2 mm higher
+  // and 0.75 mm further left than the Avery L7651 template lines up best.
+  { id: "tw-2065", label: "TW-2065 · 38,1 × 21,2 mm · 5 × 13 (65/coală)", columns: 5, rows: 13, width: 39.1, height: 21.2, top: 8.7, left: 4, gapX: 1.5, gapY: 0 },
   { id: "5x13-38.1x21.2", label: "38,1 × 21,2 mm · 5 × 13 (65/coală, ex. Avery L7651)", columns: 5, rows: 13, width: 38.1, height: 21.2, top: 10.7, left: 4.75, gapX: 2.5, gapY: 0 },
   { id: "3x8-70x37", label: "70 × 37 mm · 3 × 8 (24/coală, ex. Avery 3474)", columns: 3, rows: 8, width: 70, height: 37, top: 0.5, left: 0, gapX: 0, gapY: 0 },
   { id: "3x7-63.5x38.1", label: "63,5 × 38,1 mm · 3 × 7 (21/coală, ex. Avery L7160)", columns: 3, rows: 7, width: 63.5, height: 38.1, top: 15.15, left: 7.21, gapX: 2.54, gapY: 0 },

@@ -19,7 +19,7 @@ import qrcode.image.svg
 from app import models, schemas
 from app.database import begin_inventory_write, get_db
 from app.services.code_generator import generate_device_code, reserve_entity_id
-from app.routes.tags import find_assignable_tag, mark_assigned, mark_void, record_tag_change
+from app.routes.tags import find_assignable_tag, mark_assigned, mark_free, record_tag_change
 from app.services.audit import record_activity
 from app.services.security import UPLOAD_DIR
 
@@ -541,14 +541,14 @@ def assign_device_tag(device_id: int, payload: schemas.TagAssignRequest, db: Ses
 
     tag = find_assignable_tag(db, payload.tag_code)
     if old is not None:
-        mark_void(old)
+        mark_free(old)
         db.flush()
     mark_assigned(tag, device)
     db.flush()
     if old is not None:
         record_tag_change(
             db, device, "DEVICE_TAG_REPLACED", "Etichetă înlocuită",
-            f"{device.code} · {device.name}: eticheta {old.code} a fost înlocuită cu {tag.code}; {old.code} a fost anulată.",
+            f"{device.code} · {device.name}: eticheta {old.code} a fost înlocuită cu {tag.code}; {old.code} este din nou liberă.",
             old.code, tag.code,
         )
     else:
@@ -922,8 +922,8 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
         notify=True,
     )
     if db_device.tag is not None:
-        # A removed sticker must not be stuck on another item by mistake.
-        mark_void(db_device.tag)
+        # The tag is free again and can be stuck on another item.
+        mark_free(db_device.tag)
         db.flush()
     db.delete(db_device)
     db.commit()

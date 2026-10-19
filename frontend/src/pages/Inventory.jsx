@@ -55,7 +55,7 @@ export default function Inventory({ devices, onDelete, onOpen, onAddWithTag, del
       } else if (tag.status === "ASSIGNED" && tag.device) {
         onOpen?.(tag.device.id);
       } else {
-        setScanNotice(`Eticheta ${tag.code} a fost anulată și nu mai identifică un obiect.`);
+        setScanNotice(`Eticheta ${tag.code} nu identifică un obiect.`);
       }
       setSearch("");
     } catch (err) {

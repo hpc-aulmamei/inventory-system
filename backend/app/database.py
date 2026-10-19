@@ -77,6 +77,11 @@ def ensure_schema_compatibility():
                 # Legacy assignments are ambiguous: preserve them for admin review.
                 connection.execute(text("UPDATE people SET is_responsible = 1 WHERE id IN (SELECT responsible_person_id FROM devices WHERE responsible_person_id IS NOT NULL)"))
 
+    # Tags are no longer voided: ones voided by earlier versions are free again.
+    if "asset_tags" in inspector.get_table_names():
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE asset_tags SET status = 'AVAILABLE', device_id = NULL, voided_at = NULL WHERE status = 'VOID'"))
+
     columns = {column["name"] for column in inspector.get_columns("locations")}
     if "active" not in columns:
         with engine.begin() as connection:

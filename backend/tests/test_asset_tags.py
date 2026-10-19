@@ -1,5 +1,8 @@
-"""Pre-printed tags: batches, assignment on creation, replacement and voiding."""
+"""Pre-printed tags: batches, assignment on creation, replacement and deletion."""
 import os
+import sqlite3
+import subprocess
+import sys
 
 from fastapi.testclient import TestClient
 
@@ -69,35 +72,42 @@ def test_unusable_tags_are_rejected_without_creating_the_item(client):
     assert assigned.status_code == 409 and "DEV-00001" in assigned.json()["detail"]
     assert new_device(client, lab["id"], tag_code="INV-999999").status_code == 404
 
-    assert client.post("/tags/INV-000002/void").json()["status"] == "VOID"
-    assert new_device(client, lab["id"], tag_code="INV-000002").status_code == 409
+    # A deleted (lost) tag is gone: its number can no longer be used.
+    assert client.delete("/tags/inv-000002").status_code == 200
+    assert client.get("/tags/INV-000002").status_code == 404
+    assert new_device(client, lab["id"], tag_code="INV-000002").status_code == 404
     missing = client.post("/devices/", json={"name": "Fără etichetă", "category": "X", "location_id": lab["id"]})
     assert missing.status_code == 422
     assert new_device(client, lab["id"], tag_code="   ").status_code == 400
     assert len(client.get("/devices/").json()) == 1
-    # A tag on an item is replaced from the item page, not voided directly.
-    assert client.post("/tags/INV-000001/void").status_code == 409
+    # A tag on an item is replaced from the item page, not deleted directly.
+    on_item = client.delete("/tags/INV-000001")
+    assert on_item.status_code == 409 and "DEV-00001" in on_item.json()["detail"]
+    assert client.get("/tags/INV-000001").json()["status"] == "ASSIGNED"
 
 
-def test_replacing_a_tag_voids_the_old_sticker(client):
+def test_a_replaced_tag_is_free_again_and_can_go_on_another_item(client):
     lab = location(client)
     printed = batch(client, 3)
     device = new_device(client, lab["id"], tag_code="INV-000001").json()
 
     replaced = client.post(f"/devices/{device['id']}/tag", json={"tag_code": "inv-000002"})
     assert replaced.status_code == 200 and replaced.json()["tag_code"] == "INV-000002"
-    assert client.get("/tags/INV-000001").json()["status"] == "VOID"
+    freed = client.get("/tags/INV-000001").json()
+    assert (freed["status"], freed["device"], freed["assigned_at"]) == ("AVAILABLE", None, None)
     # Items keep a tag: there is no way to leave one untagged.
     assert client.delete(f"/devices/{device['id']}/tag").status_code == 405
 
-    # Reprinting a batch only prints stickers that can still be used.
-    reprint = client.get(f"/tags/batches/{printed['id']}").json()
-    assert [tag["code"] for tag in reprint["tags"]] == ["INV-000003"]
-    assert (reprint["available"], reprint["assigned"], reprint["void"]) == (1, 1, 1)
+    summary = client.get(f"/tags/batches/{printed['id']}").json()
+    assert [tag["code"] for tag in summary["tags"]] == ["INV-000001", "INV-000003"]
+    assert (summary["available"], summary["assigned"]) == (2, 1) and "void" not in summary
+
+    other = new_device(client, lab["id"], tag_code="INV-000001")
+    assert other.status_code == 201 and other.json()["tag_code"] == "INV-000001"
 
     with SessionLocal() as db:
         events = [event.event_type for event in db.query(models.AuditEvent).order_by(models.AuditEvent.id)]
-    assert events[-1] == "DEVICE_TAG_REPLACED"
+    assert "DEVICE_TAG_REPLACED" in events
 
 
 def test_items_from_before_tags_can_get_one(client):
@@ -113,12 +123,29 @@ def test_items_from_before_tags_can_get_one(client):
         assert db.query(models.AuditEvent).order_by(models.AuditEvent.id.desc()).first().event_type == "DEVICE_TAG_ASSIGNED"
 
 
-def test_deleting_an_item_voids_its_tag(client):
+def test_deleting_an_item_frees_its_tag(client):
     lab = location(client)
     batch(client, 1)
     device = new_device(client, lab["id"], tag_code="INV-000001").json()
     assert client.delete(f"/devices/{device['id']}").status_code == 200
-    assert client.get("/tags/INV-000001").json()["status"] == "VOID"
+    assert client.get("/tags/INV-000001").json()["status"] == "AVAILABLE"
+    assert new_device(client, lab["id"], tag_code="INV-000001").status_code == 201
+
+
+def test_tags_voided_by_earlier_versions_become_free(tmp_path):
+    db = tmp_path / "voided.db"
+    env = dict(os.environ, DATABASE_URL="sqlite:///" + str(db))
+    start = [sys.executable, "-c", "from app.main import app"]
+    subprocess.run(start, env=env, check=True, capture_output=True)
+    with sqlite3.connect(db) as con:
+        con.execute("INSERT INTO asset_tag_batches (id, quantity, created_at) VALUES (1, 2, CURRENT_TIMESTAMP)")
+        con.execute("INSERT INTO asset_tags (id, code, batch_id, status, voided_at) VALUES (1, 'INV-000001', 1, 'VOID', CURRENT_TIMESTAMP)")
+        con.execute("INSERT INTO asset_tags (id, code, batch_id, status) VALUES (2, 'INV-000002', 1, 'AVAILABLE')")
+    subprocess.run(start, env=env, check=True, capture_output=True)
+    with sqlite3.connect(db) as con:
+        assert con.execute("SELECT code, status, voided_at FROM asset_tags ORDER BY id").fetchall() == [
+            ("INV-000001", "AVAILABLE", None), ("INV-000002", "AVAILABLE", None),
+        ]
 
 
 def test_reset_removes_tags_but_never_reuses_their_numbers(client, monkeypatch):
@@ -137,6 +164,6 @@ def test_tag_endpoints_require_an_admin_session(client):
     printed = batch(client, 1)
     with TestClient(app) as public:
         for method, path in [("GET", "/tags/batches"), ("POST", "/tags/batches"), ("GET", f"/tags/batches/{printed['id']}"),
-                             ("GET", "/tags/INV-000001"), ("POST", "/tags/INV-000001/void"),
+                             ("GET", "/tags/INV-000001"), ("DELETE", "/tags/INV-000001"),
                              ("POST", "/devices/1/tag")]:
             assert public.request(method, path, json={}).status_code == 401, (method, path)

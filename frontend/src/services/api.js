@@ -167,7 +167,7 @@ export function getTagBatches() { return apiRequest("/tags/batches"); }
 export function createTagBatch(quantity) { return apiRequest("/tags/batches", { method: "POST", body: JSON.stringify({ quantity }) }); }
 export function getTagBatchForPrinting(batchId) { return apiRequest(`/tags/batches/${batchId}`); }
 export function getTag(code, signal) { return apiRequest(`/tags/${encodeURIComponent(code.trim())}`, { signal }); }
-export function voidTag(code) { return apiRequest(`/tags/${encodeURIComponent(code.trim())}/void`, { method: "POST" }); }
+export function deleteTag(code) { return apiRequest(`/tags/${encodeURIComponent(code.trim())}`, { method: "DELETE" }); }
 export function assignDeviceTag(deviceId, tagCode) { return apiRequest(`/devices/${deviceId}/tag`, { method: "POST", body: JSON.stringify({ tag_code: tagCode }) }); }
 
 export function getDevicePublicAccess(deviceId, baseUrl = window.location.origin) {

@@ -166,8 +166,9 @@ class AssetTagBatch(Base):
 class AssetTag(Base):
     """A pre-printed sticker. It becomes an item's identity when assigned.
 
-    AVAILABLE: printed, not on an item yet. ASSIGNED: stuck on device_id.
-    VOID: lost, damaged, removed or replaced; never assignable again.
+    AVAILABLE: printed and not on an item (again, if it was taken off one).
+    ASSIGNED: stuck on device_id. Lost or damaged free tags are deleted.
+    (VOID was used by earlier versions; such tags are freed at startup.)
     """
 
     __tablename__ = "asset_tags"

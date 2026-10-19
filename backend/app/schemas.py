@@ -249,7 +249,6 @@ class TagBatchResponse(BaseModel):
     last_code: str
     available: int
     assigned: int
-    void: int
 
 
 class TagBatchPrintResponse(TagBatchResponse):

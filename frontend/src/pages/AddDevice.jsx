@@ -17,7 +17,6 @@ const initialForm = {
 
 function tagProblem(tag) {
   if (tag.status === "ASSIGNED") return `Eticheta ${tag.code} este deja pe ${tag.device ? `${tag.device.code} · ${tag.device.name}` : "alt obiect"}.`;
-  if (tag.status === "VOID") return `Eticheta ${tag.code} a fost anulată și nu mai poate fi folosită.`;
   return "";
 }
 

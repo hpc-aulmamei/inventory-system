@@ -3,7 +3,7 @@ import Icon from "../components/Icon";
 import usePendingAction from "../hooks/usePendingAction";
 import { formatDateTime } from "../hooks/dateFormatting";
 import { SHEET_PRESETS, labelsPerSheet, openPrintWindow, presetById, printTagSheet } from "../hooks/tagSheets";
-import { createTagBatch, getTagBatchForPrinting, getTagBatches, voidTag } from "../services/api";
+import { createTagBatch, deleteTag, getTagBatchForPrinting, getTagBatches } from "../services/api";
 
 const PRESET_KEY = "inventory-tag-sheet";
 
@@ -20,7 +20,7 @@ export default function Tags() {
   const [quantity, setQuantity] = useState(() => String(labelsPerSheet(presetById(savedPresetId()))));
   const [skip, setSkip] = useState("0");
   const [outline, setOutline] = useState(false);
-  const [voidCode, setVoidCode] = useState("");
+  const [deleteCode, setDeleteCode] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const { busy, beginAction, endAction } = usePendingAction();
@@ -103,14 +103,14 @@ export default function Tags() {
     });
   }
 
-  function handleVoid(event) {
+  function handleDelete(event) {
     event.preventDefault();
-    const code = voidCode.trim().toUpperCase();
-    if (!code || busy || !window.confirm(`Anulezi eticheta ${code}? Nu va mai putea fi folosită pe niciun obiect.`)) return;
+    const code = deleteCode.trim().toUpperCase();
+    if (!code || busy || !window.confirm(`Ștergi eticheta ${code}? Numărul ei nu va mai fi tipărit.`)) return;
     run(async () => {
-      const tag = await voidTag(code);
-      setVoidCode("");
-      setMessage(`Eticheta ${tag.code} este anulată.`);
+      const result = await deleteTag(code);
+      setDeleteCode("");
+      setMessage(result.message);
       await loadBatches();
     });
   }
@@ -150,13 +150,13 @@ export default function Tags() {
             <p className="tag-print-hint"><Icon name="alert" size={14} /> În dialogul de tipărire alege scara 100% (dimensiune reală) și margini „Niciuna”, altfel etichetele nu se aliniază cu coala.</p>
           </form>
 
-          <form className="panel compact-form tag-void-form" onSubmit={handleVoid} aria-busy={busy}>
-            <div className="panel-header"><div><span className="panel-eyebrow">ETICHETĂ PIERDUTĂ</span><h3>Anulează o etichetă</h3></div></div>
+          <form className="panel compact-form tag-delete-form" onSubmit={handleDelete} aria-busy={busy}>
+            <div className="panel-header"><div><span className="panel-eyebrow">ETICHETĂ PIERDUTĂ</span><h3>Șterge o etichetă</h3></div></div>
             <label className="field"><span>Cod etichetă</span>
-              <input disabled={busy} maxLength={40} placeholder="INV-000123" value={voidCode} onChange={(event) => setVoidCode(event.target.value)} autoCapitalize="characters" spellCheck={false} />
-              <small>Pentru etichete libere deteriorate sau pierdute. Eticheta de pe un obiect se schimbă din fișa obiectului.</small>
+              <input disabled={busy} maxLength={40} placeholder="INV-000123" value={deleteCode} onChange={(event) => setDeleteCode(event.target.value)} autoCapitalize="characters" spellCheck={false} />
+              <small>Pentru etichete libere deteriorate sau pierdute. Eticheta de pe un obiect se înlocuiește din fișa obiectului; cea veche redevine liberă.</small>
             </label>
-            <div className="form-actions"><button disabled={busy || !voidCode.trim()} className="btn btn-secondary" type="submit">Anulează eticheta</button></div>
+            <div className="form-actions"><button disabled={busy || !deleteCode.trim()} className="btn btn-secondary" type="submit">Șterge eticheta</button></div>
           </form>
 
           {message && <div className="alert alert-success" role="status"><Icon name="check" size={17} />{message}</div>}
@@ -176,7 +176,7 @@ export default function Tags() {
                     <div className="tag-batch-counts">
                       <span><strong>{batch.available}</strong> libere</span>
                       <span><strong>{batch.assigned}</strong> pe obiecte</span>
-                      <span><strong>{batch.void}</strong> anulate</span>
+                      {batch.quantity - batch.available - batch.assigned > 0 && <span><strong>{batch.quantity - batch.available - batch.assigned}</strong> șterse</span>}
                     </div>
                   </td>
                   <td><button type="button" className="btn btn-light tag-reprint" title="Retipărește etichetele libere din acest lot" disabled={busy || !batch.available} onClick={() => handleReprint(batch)}><Icon name="printer" size={15} /> Retipărește</button></td>

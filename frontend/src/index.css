@@ -1305,14 +1305,18 @@ html[data-theme="dark"] .login-theme-toggle { background: rgba(13, 29, 31, .82);
 .tag-scan-field { margin-bottom: 16px; }
 .tag-print-link { margin: -10px 0 12px; }
 .tag-scan-field > span { display: inline-flex; align-items: center; gap: 6px; }
-.tag-scan-field input, .tag-panel input, .tag-void-form input { font-family: "SFMono-Regular", Consolas, monospace; letter-spacing: .04em; text-transform: uppercase; }
-.tag-scan-field input::placeholder, .tag-panel input::placeholder, .tag-void-form input::placeholder { font-family: inherit; letter-spacing: 0; text-transform: none; }
+.tag-scan-field input, .tag-panel input, .tag-delete-form input { font-family: "SFMono-Regular", Consolas, monospace; letter-spacing: .04em; text-transform: uppercase; }
+.tag-scan-field input::placeholder, .tag-panel input::placeholder, .tag-delete-form input::placeholder { font-family: inherit; letter-spacing: 0; text-transform: none; }
 .tag-scan-field.ok small { color: var(--success); }
 .tag-scan-field.error small { color: var(--danger); }
 .tag-scan-field.error input { border-color: var(--danger); }
 .device-tag-code { display: block; margin-top: 4px; color: var(--text-soft); font: 600 10px "SFMono-Regular", Consolas, monospace; }
 .device-tag-code.missing { color: var(--text-faint); font-family: inherit; font-weight: 500; font-style: italic; }
 .tag-panel { display: flex; flex-direction: column; gap: 12px; }
+.detail-facts .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.detail-edit-button { flex: 0 0 auto; }
+.detail-edit-form .field { margin-bottom: 12px; }
+.detail-edit-form .form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .tag-current { padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; display: flex; align-items: center; gap: 9px; background: var(--surface-soft); color: var(--primary); }
 .tag-current strong { color: var(--text); font: 800 14px "SFMono-Regular", Consolas, monospace; letter-spacing: .05em; }
 .tag-current.missing, .tag-current.missing strong { color: var(--text-faint); font-family: inherit; font-weight: 600; letter-spacing: 0; }

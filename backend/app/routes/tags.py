@@ -31,8 +31,6 @@ def get_tag_or_404(db: Session, code: str) -> models.AssetTag:
 
 def find_assignable_tag(db: Session, code: str) -> models.AssetTag:
     tag = get_tag_or_404(db, code)
-    if tag.status == "VOID":
-        raise HTTPException(status_code=409, detail=f"Eticheta {code} a fost anulată și nu mai poate fi folosită.")
     if tag.status == "ASSIGNED":
         device = db.get(models.Device, tag.device_id)
         holder = f"{device.code} · {device.name}" if device else "alt obiect"
@@ -46,10 +44,11 @@ def mark_assigned(tag: models.AssetTag, device: models.Device) -> None:
     tag.assigned_at = datetime.now(timezone.utc)
 
 
-def mark_void(tag: models.AssetTag) -> None:
-    tag.status = "VOID"
+def mark_free(tag: models.AssetTag) -> None:
+    # A tag taken off an item can be stuck on another one.
+    tag.status = "AVAILABLE"
     tag.device_id = None
-    tag.voided_at = datetime.now(timezone.utc)
+    tag.assigned_at = None
 
 
 def tag_payload(tag: models.AssetTag, db: Session) -> dict:
@@ -73,7 +72,6 @@ def batch_summaries(db: Session, batch_ids: list[int] | None = None) -> list[dic
             func.max(models.AssetTag.code),
             func.sum(case((status == "AVAILABLE", 1), else_=0)),
             func.sum(case((status == "ASSIGNED", 1), else_=0)),
-            func.sum(case((status == "VOID", 1), else_=0)),
         )
         .join(models.AssetTag, models.AssetTag.batch_id == models.AssetTagBatch.id)
         .group_by(models.AssetTagBatch.id)
@@ -84,8 +82,8 @@ def batch_summaries(db: Session, batch_ids: list[int] | None = None) -> list[dic
     return [{
         "id": batch.id, "quantity": batch.quantity, "created_at": batch.created_at,
         "first_code": first, "last_code": last,
-        "available": available or 0, "assigned": assigned or 0, "void": void or 0,
-    } for batch, first, last, available, assigned, void in query.all()]
+        "available": available or 0, "assigned": assigned or 0,
+    } for batch, first, last, available, assigned in query.all()]
 
 
 def printable_batch(db: Session, batch_id: int) -> dict:
@@ -143,25 +141,28 @@ def get_tag(code: str, db: Session = Depends(get_db)):
     return tag_payload(get_tag_or_404(db, schemas.normalize_tag_code(code) or ""), db)
 
 
-@router.post("/{code}/void", response_model=schemas.TagResponse)
-def void_tag(code: str, db: Session = Depends(get_db)):
+@router.delete("/{code}")
+def delete_tag(code: str, db: Session = Depends(get_db)):
+    """Remove a lost or damaged free tag. Its number is never printed again."""
     begin_inventory_write(db)
     tag = get_tag_or_404(db, schemas.normalize_tag_code(code) or "")
     if tag.status == "ASSIGNED":
-        raise HTTPException(status_code=409, detail="Eticheta este pe un obiect. Elimin-o din fișa obiectului.")
-    if tag.status == "AVAILABLE":
-        mark_void(tag)
-        record_activity(
-            db,
-            event_type="TAG_VOIDED",
-            category="INVENTORY",
-            severity="WARNING",
-            title="Etichetă anulată",
-            description=f"Eticheta {tag.code} a fost anulată și nu mai poate fi folosită.",
-            details={"tag_code": tag.code, "batch_id": tag.batch_id},
+        device = db.get(models.Device, tag.device_id)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Eticheta {tag.code} este pe {device.code if device else 'un obiect'}. Înlocuiește-o din fișa obiectului.",
         )
-        db.commit()
-    return tag_payload(tag, db)
+    db.delete(tag)
+    record_activity(
+        db,
+        event_type="TAG_DELETED",
+        category="INVENTORY",
+        title="Etichetă ștearsă",
+        description=f"Eticheta liberă {tag.code} a fost ștearsă din lista de etichete.",
+        details={"tag_code": tag.code, "batch_id": tag.batch_id},
+    )
+    db.commit()
+    return {"message": f"Eticheta {tag.code} a fost ștearsă."}
 
 
 def record_tag_change(db: Session, device: models.Device, event_type: str, title: str,

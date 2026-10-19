@@ -32,6 +32,25 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// Statuses an admin can set here; LOANED is set by Loans only.
+const EDITABLE_STATUSES = [
+  ["AVAILABLE", "Disponibil"],
+  ["IN_USE", "În uz"],
+  ["BROKEN", "Stricat"],
+  ["LOST", "Pierdut"],
+  ["RETIRED", "Scos din uz"],
+];
+
+function detailsForm(device) {
+  return {
+    name: device.name || "",
+    category: device.category || "",
+    serial_number: device.serial_number || "",
+    description: device.description || "",
+    status: device.status,
+  };
+}
+
 function formatDate(value) {
   return formatDateTime(value, {
     day: "2-digit",
@@ -52,6 +71,7 @@ export default function DeviceDetail({ deviceId, onBack, onChanged }) {
   const [loading, setLoading] = useState(true);
   const [publicAccess, setPublicAccess] = useState(null);
   const [newTag, setNewTag] = useState("");
+  const [details, setDetails] = useState(null);
   const [actionKind, setActionKind] = useState("");
   const { busy, beginAction, endAction } = usePendingAction();
   const savingResponsible = actionKind === "responsible";
@@ -102,6 +122,7 @@ export default function DeviceDetail({ deviceId, onBack, onChanged }) {
     currentDevice.current = deviceId;
     setTracking(null);
     setPublicAccess(null);
+    setDetails(null);
     setMessage("");
     setError("");
     load();
@@ -150,12 +171,45 @@ export default function DeviceDetail({ deviceId, onBack, onChanged }) {
     });
   }
 
+  function startEditingDetails() {
+    setDetails(detailsForm(tracking.device));
+    setMessage("");
+    setError("");
+  }
+
+  async function handleSaveDetails(event) {
+    event.preventDefault();
+    if (!details || busy || loading) return;
+    const name = details.name.trim();
+    const category = details.category.trim();
+    if (!name || !category) {
+      setError("Numele și categoria sunt obligatorii.");
+      return;
+    }
+    const loaned = tracking.device.status === "LOANED";
+    await runAction("details", async (isCurrent) => {
+      await updateDevice(deviceId, {
+        name,
+        category,
+        serial_number: details.serial_number.trim() || null,
+        description: details.description.trim() || null,
+        // While on loan the status belongs to the loan; send it only otherwise.
+        ...(loaned ? {} : { status: details.status }),
+      });
+      if (!isCurrent()) return;
+      setDetails(null);
+      await load();
+      await onChanged?.();
+      if (isCurrent()) setMessage("Datele obiectului au fost actualizate.");
+    });
+  }
+
   async function handleAssignTag(event) {
     event.preventDefault();
     const code = newTag.trim().toUpperCase();
     const current = tracking?.device.tag_code;
     if (!code || busy || loading) return;
-    if (current && !window.confirm(`Înlocuiești eticheta ${current} cu ${code}? ${current} va fi anulată și nu mai poate fi folosită.`)) return;
+    if (current && !window.confirm(`Înlocuiești eticheta ${current} cu ${code}? ${current} redevine liberă și poate fi pusă pe alt obiect.`)) return;
     await runAction("tag", async (isCurrent) => {
       await assignDeviceTag(deviceId, code);
       if (!isCurrent()) return;
@@ -466,7 +520,36 @@ export default function DeviceDetail({ deviceId, onBack, onChanged }) {
 
         <aside className="detail-side-column">
           <div className="panel detail-facts">
-            <div className="panel-header"><div><span className="panel-eyebrow">ASSET DATA</span><h3>Fișa tehnică</h3></div></div>
+            <div className="panel-header">
+              <div><span className="panel-eyebrow">ASSET DATA</span><h3>Fișa tehnică</h3></div>
+              {!details && <button type="button" className="btn btn-light detail-edit-button" disabled={busy || loading} onClick={startEditingDetails}><Icon name="edit" size={15} /> Editează</button>}
+            </div>
+            {details ? (
+              <form className="detail-edit-form" onSubmit={handleSaveDetails} aria-busy={actionKind === "details"}>
+                <fieldset className="form-fields" disabled={busy || loading}>
+                  <label className="field"><span>Nume obiect *</span><input name="name" maxLength={200} required value={details.name} onChange={(event) => setDetails({ ...details, name: event.target.value })} /></label>
+                  <label className="field"><span>Categorie *</span><input name="category" maxLength={200} required value={details.category} onChange={(event) => setDetails({ ...details, category: event.target.value })} /></label>
+                  <label className="field"><span>Număr de serie</span><input name="serial_number" maxLength={255} value={details.serial_number} onChange={(event) => setDetails({ ...details, serial_number: event.target.value })} /></label>
+                  <label className="field"><span>Status</span>
+                    {device.status === "LOANED" ? (
+                      <>
+                        <select disabled value="LOANED"><option value="LOANED">Împrumutat</option></select>
+                        <small>Obiectul este împrumutat; statusul se schimbă la returnare, din Împrumuturi.</small>
+                      </>
+                    ) : (
+                      <select name="status" value={details.status} onChange={(event) => setDetails({ ...details, status: event.target.value })}>
+                        {EDITABLE_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    )}
+                  </label>
+                  <label className="field"><span>Descriere</span><textarea name="description" maxLength={10000} className="small-textarea" value={details.description} onChange={(event) => setDetails({ ...details, description: event.target.value })} /></label>
+                </fieldset>
+                <div className="form-actions">
+                  <button type="submit" className="btn btn-primary" disabled={busy || loading}>{actionKind === "details" ? "Se salvează…" : "Salvează"}</button>
+                  <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setDetails(null)}>Renunță</button>
+                </div>
+              </form>
+            ) : (
             <dl>
               <div><dt>Cod inventar</dt><dd><code className="code-pill">{device.code}</code></dd></div>
               <div><dt>Etichetă</dt><dd>{device.tag_code ? <code className="code-pill">{device.tag_code}</code> : "Fără etichetă"}</dd></div>
@@ -475,6 +558,7 @@ export default function DeviceDetail({ deviceId, onBack, onChanged }) {
               <div><dt>Status</dt><dd><StatusBadge status={device.status} /></dd></div>
               <div><dt>ID intern</dt><dd>#{device.id}</dd></div>
             </dl>
+            )}
           </div>
 
           <form className="panel tag-panel" onSubmit={handleAssignTag} aria-busy={actionKind === "tag"}>
